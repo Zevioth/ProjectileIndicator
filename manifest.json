@@ -1,0 +1,10 @@
+{
+  "type": "preload-native",
+  "name": "Projectile Indicator",
+  "author": "MozCraft",
+  "version": "0.1.0",
+  "entry": "libprojectile_indicator.so",
+  "minecraft_versions": [],
+  "overwrite_files": [],
+  "overwrite_folders": []
+}
