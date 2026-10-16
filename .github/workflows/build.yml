@@ -8,49 +8,81 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
+      # 1. Download the repository
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
+      # 2. Install Java
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # 3. Install Android SDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
         with:
+          packages: platform-tools
           accept-android-sdk-licenses: true
           log-accepted-android-sdk-licenses: false
 
-      - name: Accept Android SDK licenses
-        run: yes | sdkmanager --licenses || true
-
-      - name: Install Android SDK tools
+      # 4. Install Android NDK
+      - name: Install Android NDK
         run: |
-          sdkmanager "platform-tools"
-          sdkmanager "platforms;android-35"
-          sdkmanager "build-tools;35.0.0"
-          sdkmanager "ndk;27.2.12479018"
+          sdkmanager "platforms;android-35" \
+            "ndk;27.2.12479018"
 
-      - name: Make build script executable
-        run: chmod +x build.sh
-
-      - name: Build mod
-        run: ./build.sh
-
-      - name: List build output
+      # 5. Configure CMake
+      - name: Configure ARM64 build
         run: |
-          echo "=== Build output ==="
-          find . -type f \( -name "*.so" -o -name "*.levipack" \) -print
+          cmake -S . -B build \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-24 \
+            -DCMAKE_BUILD_TYPE=Release
 
+      # 6. Compile the mod
+      - name: Compile native mod
+        run: |
+          cmake --build build --parallel 2
+
+      # 7. Check that the .so exists
+      - name: Check compiled library
+        run: |
+          echo "Looking for compiled .so..."
+          find build -type f -name "*.so" -print
+
+      # 8. Package the LeviPack
       - name: Package LeviPack
         run: |
-          mkdir -p dist
-          zip -r dist/ProjectileIndicator.levipack \
-            manifest.json \
-            lib \
-            assets 2>/dev/null || true
+          mkdir -p dist/package
 
+          cp manifest.json dist/package/
+
+          cp build/out/libprojectile_indicator.so \
+            dist/package/
+
+          cd dist/package
+
+          zip -q -r \
+            ../ProjectileIndicator.levipack \
+            manifest.json \
+            libprojectile_indicator.so
+
+      # 9. Show what's inside the package
+      - name: Verify LeviPack
+        run: |
+          echo "=== LeviPack contents ==="
+          unzip -l dist/ProjectileIndicator.levipack
+
+      # 10. Upload the finished mod
       - name: Upload LeviPack
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ProjectileIndicator-levipack
           path: dist/ProjectileIndicator.levipack
+          if-no-files-found: error
